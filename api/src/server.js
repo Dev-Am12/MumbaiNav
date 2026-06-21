@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { pool } from './db.js';
+import { startSyntheticDataJob } from './jobs/syntheticDataJob.js';
 
 dotenv.config();
 
@@ -9,12 +10,13 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Basic liveness check
+// Basic liveness check — does the server process respond at all
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-// DB connectivity + PostGIS setup check
+// DB connectivity + PostGIS check — confirms the Supabase connection and
+// that the postgis extension is actually enabled, not just that Postgres is up
 app.get('/health/db', async (req, res) => {
   try {
     const result = await pool.query(
@@ -27,7 +29,7 @@ app.get('/health/db', async (req, res) => {
   }
 });
 
-//seed check
+// Quick sanity check once stations are seeded — count + a sample row
 app.get('/health/stations', async (req, res) => {
   try {
     const count = await pool.query('SELECT COUNT(*) FROM stations');
@@ -44,7 +46,43 @@ app.get('/health/stations', async (req, res) => {
   }
 });
 
+// Day 2 sanity check — most recent density reading per edge, so you can
+// watch values actually change between requests as the job ticks
+app.get('/health/crowd-density', async (req, res) => {
+  try {
+    const total = await pool.query('SELECT COUNT(*) FROM crowd_density');
+    const latest = await pool.query(`
+      SELECT DISTINCT ON (edge_id) edge_id, density_score, source, timestamp
+      FROM crowd_density
+      ORDER BY edge_id, timestamp DESC
+    `);
+    res.json({
+      total_rows: Number(total.rows[0].count),
+      latest_per_edge: latest.rows,
+    });
+  } catch (err) {
+    console.error('[health/crowd-density] query failed:', err.message);
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+// Day 2 sanity check — most recent bike count per dock
+app.get('/health/bike-availability', async (req, res) => {
+  try {
+    const latest = await pool.query(`
+      SELECT DISTINCT ON (dock_station_id) dock_station_id, bikes_available, docks_total, timestamp
+      FROM bike_availability
+      ORDER BY dock_station_id, timestamp DESC
+    `);
+    res.json({ latest_per_dock: latest.rows });
+  } catch (err) {
+    console.error('[health/bike-availability] query failed:', err.message);
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   console.log(`MumbaiNav API listening on port ${PORT}`);
+  startSyntheticDataJob();
 });

@@ -8,7 +8,7 @@ CREATE TABLE stations (
   name VARCHAR(100) NOT NULL,
   type VARCHAR(20) NOT NULL CHECK (type IN ('train', 'bus_stop', 'bike_dock')),
   geom GEOGRAPHY(POINT, 4326) NOT NULL,
-  line VARCHAR(50)  --null if not trains
+  line VARCHAR(50)  -- null if not trains
 );
 
 CREATE INDEX idx_stations_geom ON stations USING GIST (geom);
