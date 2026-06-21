@@ -11,6 +11,18 @@ class ModeSegment {
     required this.label,
     required this.duration,
   });
+
+  factory ModeSegment.fromBackendStep(Map<String, dynamic> step) {
+    final mode = parseTransitMode(step['mode'] as String?);
+    final totalSeconds =
+        ((step['wait_seconds'] as num?) ?? 0) + ((step['travel_seconds'] as num?) ?? 0);
+
+    return ModeSegment(
+      mode: mode,
+      label: backendSegmentLabel(mode, step),
+      duration: formatDurationFromSeconds(totalSeconds),
+    );
+  }
 }
 
 /// A single candidate route, as returned by the A* engine and
@@ -67,6 +79,42 @@ class RouteOption {
       etaDeltaMinutes: etaDeltaMinutes ?? this.etaDeltaMinutes,
     );
   }
+}
+
+TransitMode parseTransitMode(String? rawMode) {
+  switch (rawMode) {
+    case 'train':
+      return TransitMode.train;
+    case 'bus':
+      return TransitMode.bus;
+    case 'bike':
+      return TransitMode.bike;
+    case 'walk':
+    default:
+      return TransitMode.walk;
+  }
+}
+
+String backendSegmentLabel(TransitMode mode, Map<String, dynamic> step) {
+  final toStation = (step['to_station'] as String?) ?? '';
+
+  switch (mode) {
+    case TransitMode.train:
+      return 'TRAIN';
+    case TransitMode.bus:
+      if (toStation.contains('RBI')) return 'RBI';
+      if (toStation.contains('Diamond')) return 'DB';
+      return 'BUS';
+    case TransitMode.bike:
+      return 'BIKE';
+    case TransitMode.walk:
+      return 'WALK';
+  }
+}
+
+String formatDurationFromSeconds(num seconds) {
+  final minutes = (seconds / 60).round();
+  return '${minutes}m';
 }
 
 String crowdLabel(double level) {

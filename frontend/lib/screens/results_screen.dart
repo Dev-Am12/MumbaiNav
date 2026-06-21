@@ -47,6 +47,19 @@ class _ResultsScreenState extends State<ResultsScreen> {
           }
 
           final routes = snapshot.data!;
+          if (routes.isEmpty) {
+            return const Center(
+              child: Text(
+                'No routes available right now.',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textMuted,
+                ),
+              ),
+            );
+          }
+
           final recommended = routes.firstWhere((r) => r.isRecommended);
           final others = routes.where((r) => !r.isRecommended).toList();
 
@@ -62,7 +75,13 @@ class _ResultsScreenState extends State<ResultsScreen> {
                   route: recommended,
                   onTap: () {
                     Navigator.of(context).push(
-                      smoothRoute(LiveUpdateScreen(originalRoute: recommended)),
+                      smoothRoute(
+                        LiveUpdateScreen(
+                          originalRoute: recommended,
+                          origin: widget.origin,
+                          destination: widget.destination,
+                        ),
+                      ),
                     );
                   },
                 ),

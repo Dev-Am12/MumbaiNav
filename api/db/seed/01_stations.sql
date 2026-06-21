@@ -9,10 +9,6 @@ INSERT INTO stations (name, type, geom, line) VALUES
 -- ============================================================
 -- BUS STOPS (real — OpenCity / BEST)
 -- ============================================================
--- BKC picks: the dataset has ~10 stops tagged "(BKC)" scattered across the complex.
--- Chose two that sit at opposite ends of BKC (RBI near the Bandra-facing southwest
--- edge, Diamond Bourse near the Kurla-facing northeast edge) so the two bus nodes
--- actually represent meaningfully different arrival points, not two stops 50m apart.
 INSERT INTO stations (name, type, geom, line) VALUES
   ('Bandra Station Bus Stop',        'bus_stop', ST_SetSRID(ST_MakePoint(72.842047, 19.054996), 4326)::geography, NULL),
   ('Kurla Station Bus Stop',         'bus_stop', ST_SetSRID(ST_MakePoint(72.878998, 19.067222), 4326)::geography, NULL),

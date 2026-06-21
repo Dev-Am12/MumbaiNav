@@ -1,6 +1,8 @@
 import express from 'express';
+import http from 'http';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import { Server } from 'socket.io';
 import { pool } from './db.js';
 import { startSyntheticDataJob } from './jobs/syntheticDataJob.js';
 import routeRouter from './routes/route.js';
@@ -8,8 +10,19 @@ import routeRouter from './routes/route.js';
 dotenv.config();
 
 const app = express();
+const httpServer = http.createServer(app);
+const io = new Server(httpServer, {
+  cors: {
+    origin: '*',
+  },
+});
+
 app.use(cors());
 app.use(express.json());
+
+io.on('connection', (socket) => {
+  console.log(`[socket.io] client connected: ${socket.id}`);
+});
 
 app.use('/route', routeRouter);
 
@@ -83,7 +96,9 @@ app.get('/health/bike-availability', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
+httpServer.listen(PORT, () => {
   console.log(`MumbaiNav API listening on port ${PORT}`);
   startSyntheticDataJob();
 });
+
+export { app, httpServer, io };

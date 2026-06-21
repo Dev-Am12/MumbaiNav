@@ -1,5 +1,6 @@
 import { updateCrowdDensity } from '../services/crowdDensityGenerator.js';
 import { updateBikeAvailability } from '../services/bikeAvailabilityGenerator.js';
+import { io } from '../server.js';
 
 const TICK_INTERVAL_MS = 45_000;
 
@@ -11,6 +12,11 @@ async function tick() {
       updateCrowdDensity(),
       updateBikeAvailability(),
     ]);
+    io.emit('live_conditions_update', {
+      timestamp: Date.now(),
+      density_updated: true,
+      bikes_updated: true,
+    });
     console.log(
       `[synthetic-data] tick @ ${density.timestamp} — crowd_density: ${density.updated} edges (peak=${density.peak}), bike_availability: ${bikes.updated} docks (peak=${bikes.peak})`
     );
