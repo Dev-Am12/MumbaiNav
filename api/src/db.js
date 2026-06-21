@@ -11,9 +11,6 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
-// Supabase requires SSL. rejectUnauthorized: false is the standard setting for
-// Supabase's connection pooler — their cert chain isn't always in Node's default
-// trust store, and this is the documented approach for connecting from app code.
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.DATABASE_URL?.includes('localhost')

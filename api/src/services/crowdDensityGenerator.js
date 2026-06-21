@@ -1,7 +1,5 @@
 import { pool } from '../db.js';
 
-// Peak windows shared with the schedules seed (03_schedules.sql) and the PRD
-// (Section 6.3) — one definition of "peak" used everywhere in the system.
 const PEAK_WINDOWS = [
   { start: 8 * 60, end: 10 * 60 },  // 08:00-10:00
   { start: 18 * 60, end: 20 * 60 }, // 18:00-20:00
@@ -24,10 +22,6 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
-// Base density by mode + time-of-day, per PRD Section 6.3.
-// Note: the sparse direct Harbour-line edge (Andheri<->Kurla) uses the same
-// curve as the other train edges — crowding reflects how full the carriage
-// is, which doesn't depend on how often that particular service runs.
 export function baseDensity(mode, peak) {
   if (mode === 'bus') {
     return peak ? randomInRange(0.4, 0.6) : randomInRange(0.15, 0.3);
@@ -36,7 +30,6 @@ export function baseDensity(mode, peak) {
 }
 
 export function addVariance(score) {
-  // ±0.1 so repeated demo runs don't look identical/scripted, per PRD Section 6.3
   return clamp(score + randomInRange(-0.1, 0.1), 0, 1);
 }
 

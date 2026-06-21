@@ -1,6 +1,6 @@
 import { pool } from '../db.js';
 
-const DOCKS_TOTAL = 15; // matches PRD Section 6.3 ("0-15 bikes per dock")
+const DOCKS_TOTAL = 15;
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -10,17 +10,11 @@ function minutesSinceMidnight(date) {
   return date.getHours() * 60 + date.getMinutes();
 }
 
-// Same peak windows as the crowd density generator — this is when commuters
-// are arriving via train/bus and grabbing a bike for the BKC last mile, so
-// docks empty fastest here. Matches PRD Section 6.3's "inverse relationship
-// to nearby crowd density" note.
 export function isPeakEgress(date = new Date()) {
   const m = minutesSinceMidnight(date);
   return (m >= 8 * 60 && m < 10 * 60) || (m >= 18 * 60 && m < 20 * 60);
 }
 
-// One bounded step from a known starting point — bikes shouldn't teleport
-// from 2 to 14 in one tick, per PRD Section 6.3.
 export function nextBikeCount(current, peak) {
   const baseStep = Math.floor(Math.random() * 3) - 1; // -1, 0, or +1
   const bias = peak ? -1 : 1; // peak egress drains docks; off-peak they refill

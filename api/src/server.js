@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { pool } from './db.js';
 import { startSyntheticDataJob } from './jobs/syntheticDataJob.js';
+import routeRouter from './routes/route.js';
 
 dotenv.config();
 
@@ -10,13 +11,14 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Basic liveness check — does the server process respond at all
+app.use('/route', routeRouter);
+
+// Basic liveness check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-// DB connectivity + PostGIS check — confirms the Supabase connection and
-// that the postgis extension is actually enabled, not just that Postgres is up
+// DB connectivity + PostGIS check
 app.get('/health/db', async (req, res) => {
   try {
     const result = await pool.query(
@@ -29,7 +31,7 @@ app.get('/health/db', async (req, res) => {
   }
 });
 
-// Quick sanity check once stations are seeded — count + a sample row
+// Quick check once stations are seeded — count + a sample row
 app.get('/health/stations', async (req, res) => {
   try {
     const count = await pool.query('SELECT COUNT(*) FROM stations');
@@ -46,8 +48,7 @@ app.get('/health/stations', async (req, res) => {
   }
 });
 
-// Day 2 sanity check — most recent density reading per edge, so you can
-// watch values actually change between requests as the job ticks
+// density check
 app.get('/health/crowd-density', async (req, res) => {
   try {
     const total = await pool.query('SELECT COUNT(*) FROM crowd_density');
@@ -66,7 +67,7 @@ app.get('/health/crowd-density', async (req, res) => {
   }
 });
 
-// Day 2 sanity check — most recent bike count per dock
+// bike count check
 app.get('/health/bike-availability', async (req, res) => {
   try {
     const latest = await pool.query(`
