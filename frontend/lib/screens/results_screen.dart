@@ -33,6 +33,18 @@ class _ResultsScreenState extends State<ResultsScreen> {
     );
   }
 
+  void _openLiveScreen(BuildContext context, RouteOption route) {
+    Navigator.of(context).push(
+      smoothRoute(
+        LiveUpdateScreen(
+          originalRoute: route,
+          origin: widget.origin,
+          destination: widget.destination,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -40,19 +52,34 @@ class _ResultsScreenState extends State<ResultsScreen> {
       body: FutureBuilder<List<RouteOption>>(
         future: _routesFuture,
         builder: (context, snapshot) {
-          if (!snapshot.hasData) {
+          if (snapshot.connectionState != ConnectionState.done) {
             return const Center(
-              child: CircularProgressIndicator(color: AppColors.amber),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(color: AppColors.amber),
+                  SizedBox(height: 14),
+                  Text(
+                    'Finding best routes…',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                ],
+              ),
             );
           }
 
-          final routes = snapshot.data!;
+          final routes = snapshot.data ?? [];
+
           if (routes.isEmpty) {
             return const Center(
               child: Text(
-                'No routes available right now.',
+                'No routes found. Check your connection and try again.',
+                textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 16,
+                  fontSize: 15,
                   fontWeight: FontWeight.w600,
                   color: AppColors.textMuted,
                 ),
@@ -60,40 +87,40 @@ class _ResultsScreenState extends State<ResultsScreen> {
             );
           }
 
-          final recommended = routes.firstWhere((r) => r.isRecommended);
-          final others = routes.where((r) => !r.isRecommended).toList();
+          // Safety: if AI ranking somehow marks none as recommended,
+          // promote the first (fastest A* result) rather than crash.
+          final recommended = routes.firstWhere(
+            (r) => r.isRecommended,
+            orElse: () => routes.first,
+          );
+          final others = routes.where((r) => r.id != recommended.id).toList();
 
-          return AnimatedOpacity(
-            opacity: 1,
-            duration: const Duration(milliseconds: 350),
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-              children: [
-                const _SectionLabel('RECOMMENDED'),
-                const SizedBox(height: 10),
-                RouteCard(
-                  route: recommended,
-                  onTap: () {
-                    Navigator.of(context).push(
-                      smoothRoute(
-                        LiveUpdateScreen(
-                          originalRoute: recommended,
-                          origin: widget.origin,
-                          destination: widget.destination,
-                        ),
-                      ),
-                    );
-                  },
-                ),
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+            children: [
+              const _SectionLabel('RECOMMENDED'),
+              const SizedBox(height: 10),
+              RouteCard(
+                route: recommended,
+                onTap: () => _openLiveScreen(context, recommended),
+              ),
+              if (others.isNotEmpty) ...[
                 const SizedBox(height: 24),
                 const _SectionLabel('OTHER OPTIONS'),
                 const SizedBox(height: 10),
                 for (final r in others) ...[
-                  RouteCard(route: r),
+                  // Every alternate card is tappable — tapping opens
+                  // the live-update screen for that specific route,
+                  // not the recommended one. This was the bug where
+                  // only the top card was interactive.
+                  RouteCard(
+                    route: r,
+                    onTap: () => _openLiveScreen(context, r),
+                  ),
                   const SizedBox(height: 14),
                 ],
               ],
-            ),
+            ],
           );
         },
       ),
