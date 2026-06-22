@@ -2,7 +2,7 @@ import { updateCrowdDensity } from '../services/crowdDensityGenerator.js';
 import { updateBikeAvailability } from '../services/bikeAvailabilityGenerator.js';
 import { io } from '../server.js';
 
-const TICK_INTERVAL_MS = 45_000;
+const TICK_INTERVAL_MS = 15_000;
 
 let intervalHandle = null;
 
