@@ -1,69 +1,107 @@
 enum TransitMode { train, bus, bike, walk }
 
-/// One leg of a multi-modal route (e.g. "Western Line train, 12m").
+/// One leg of a multi-modal route.
 class ModeSegment {
   final TransitMode mode;
-  final String label;   // e.g. "WR LOCAL", "BEST 318", "YULU"
-  final String sublabel; // from → to short form, shown as second line
-  final String duration; // e.g. "12m"
+  final String label;       // e.g. "WR LOCAL", "BEST 318", "YULU"
+  final String sublabel;    // short destination — shown in mode chip
+  final String duration;    // combined wait+travel, e.g. "17m" — for mode chip
+
+  // Step-by-step sheet fields
+  final String fromStation;     // full boarding station name, e.g. "Andheri"
+  final String toStation;       // full alighting station name
+  final String? departAt;       // formatted departure time, e.g. "4:05 PM"
+  final int    waitMinutes;     // scheduled wait before boarding (0 for walk/bike)
+  final int    travelMinutes;   // pure travel time excluding wait
 
   const ModeSegment({
     required this.mode,
     required this.label,
     required this.duration,
-    this.sublabel = '',
+    this.sublabel      = '',
+    this.fromStation   = '',
+    this.toStation     = '',
+    this.departAt,
+    this.waitMinutes   = 0,
+    this.travelMinutes = 0,
   });
 
   factory ModeSegment.fromBackendStep(Map<String, dynamic> step) {
-    final mode = parseTransitMode(step['mode'] as String?);
-    final totalSeconds =
-        ((step['wait_seconds'] as num?) ?? 0) +
-        ((step['travel_seconds'] as num?) ?? 0);
-    final fromStation = (step['from_station'] as String?) ?? '';
-    final toStation   = (step['to_station']   as String?) ?? '';
+    final mode         = parseTransitMode(step['mode'] as String?);
+    final waitSec      = ((step['wait_seconds']   as num?) ?? 0).toInt();
+    final travelSec    = ((step['travel_seconds']  as num?) ?? 0).toInt();
+    final totalSec     = waitSec + travelSec;
+    final fromStation  = (step['from_station'] as String?) ?? '';
+    final toStation    = (step['to_station']   as String?) ?? '';
 
     return ModeSegment(
-      mode:      mode,
-      label:     backendSegmentLabel(mode, step),
-      sublabel:  _shortStation(toStation),
-      duration:  formatDurationFromSeconds(totalSeconds),
+      mode:          mode,
+      label:         backendSegmentLabel(mode, step),
+      sublabel:      _shortStation(toStation),
+      duration:      formatDurationFromSeconds(totalSec),
+      fromStation:   fromStation,
+      toStation:     toStation,
+      departAt:      _formatIsoTime(step['depart_at'] as String?),
+      waitMinutes:   (waitSec  / 60).round(),
+      travelMinutes: (travelSec / 60).round(),
     );
   }
 }
 
-/// Shorten a full station name to something that fits in the chip
-/// e.g. "BKC Bus Stop (RBI, SW)" → "BKC (RBI)"
-String _shortStation(String name) {
-  if (name.contains('BKC Bus Stop (RBI'))         return 'BKC (RBI)';
-  if (name.contains('BKC Bus Stop (Diamond'))      return 'BKC (DB)';
-  if (name.contains('BKC Bike Dock'))              return 'BKC Dock';
-  if (name.contains('Bandra Station Bus Stop'))    return 'Bandra BS';
-  if (name.contains('Kurla Station Bus Stop'))     return 'Kurla BS';
-  if (name.contains('Bandra Station Bike Dock'))   return 'Bandra BD';
-  if (name.contains('Kurla Station Bike Dock'))    return 'Kurla BD';
-  if (name.contains('Dadar (Western)'))            return 'Dadar WR';
-  if (name.contains('Dadar (Central)'))            return 'Dadar CR';
-  return name.length > 10 ? '${name.substring(0, 10)}…' : name;
+// ── Time helpers ──────────────────────────────────────────────────────────────
+
+String? _formatIsoTime(String? iso) {
+  if (iso == null || iso.isEmpty) return null;
+  final dt = DateTime.tryParse(iso);
+  if (dt == null) return null;
+  final local  = dt.toLocal();
+  final h      = local.hour % 12 == 0 ? 12 : local.hour % 12;
+  final m      = local.minute.toString().padLeft(2, '0');
+  final period = local.hour < 12 ? 'AM' : 'PM';
+  return '$h:$m $period';
 }
 
-/// A single candidate route, as returned by the A* engine and
-/// (for the top pick) re-ranked/annotated by the Gemini AI layer.
+// ── Station display helpers ───────────────────────────────────────────────────
+
+/// Short name for the mode-chip sublabel (tight space)
+String _shortStation(String name) {
+  if (name.contains('BKC Bus Stop (RBI'))        return 'BKC (RBI)';
+  if (name.contains('BKC Bus Stop (Diamond'))     return 'BKC (DB)';
+  if (name.contains('BKC Bike Dock'))             return 'BKC Dock';
+  if (name.contains('Bandra Station Bus Stop'))   return 'Bandra BS';
+  if (name.contains('Kurla Station Bus Stop'))    return 'Kurla BS';
+  if (name.contains('Bandra Station Bike Dock'))  return 'Bandra BD';
+  if (name.contains('Kurla Station Bike Dock'))   return 'Kurla BD';
+  if (name.contains('Dadar (Western)'))           return 'Dadar WR';
+  if (name.contains('Dadar (Central)'))           return 'Dadar CR';
+  return name.length > 12 ? '${name.substring(0, 12)}…' : name;
+}
+
+/// Clean boarding/alighting name for step-by-step sheet (more space)
+String cleanStation(String name) {
+  if (name.contains('BKC Bus Stop (RBI'))        return 'BKC — RBI Gate';
+  if (name.contains('BKC Bus Stop (Diamond'))     return 'BKC — Diamond Bourse';
+  if (name.contains('BKC Bike Dock'))             return 'BKC Bike Dock';
+  if (name.contains('Bandra Station Bus Stop'))   return 'Bandra Bus Stop';
+  if (name.contains('Kurla Station Bus Stop'))    return 'Kurla Bus Stop';
+  if (name.contains('Bandra Station Bike Dock'))  return 'Bandra Bike Dock';
+  if (name.contains('Kurla Station Bike Dock'))   return 'Kurla Bike Dock';
+  return name; // train stations + Dadar already clean
+}
+
+// ── Route option ──────────────────────────────────────────────────────────────
+
 class RouteOption {
   final String id;
-  final int etaMinutes;
+  final int    etaMinutes;
   final String arrivalTime;
   final String fare;
   final List<ModeSegment> segments;
-
-  /// 0.0 (empty) to 1.0 (packed) — matches crowd_density.density_score
-  final double crowdLevel;
-
-  final bool isRecommended;
+  final double crowdLevel;       // 0.0–1.0
+  final bool   isRecommended;
   final String? aiReasoning;
-
-  /// Only set on a live-recalculated route, e.g. "ETA improved by 2m"
   final String? etaChangeNote;
-  final int? etaDeltaMinutes;
+  final int?    etaDeltaMinutes;
 
   const RouteOption({
     required this.id,
@@ -72,92 +110,81 @@ class RouteOption {
     required this.fare,
     required this.segments,
     required this.crowdLevel,
-    this.isRecommended = false,
+    this.isRecommended   = false,
     this.aiReasoning,
     this.etaChangeNote,
     this.etaDeltaMinutes,
   });
 
   RouteOption copyWith({
-    int? etaMinutes,
+    int?    etaMinutes,
     String? arrivalTime,
     double? crowdLevel,
     String? aiReasoning,
     String? etaChangeNote,
-    int? etaDeltaMinutes,
+    int?    etaDeltaMinutes,
   }) {
     return RouteOption(
-      id: id,
-      etaMinutes: etaMinutes ?? this.etaMinutes,
-      arrivalTime: arrivalTime ?? this.arrivalTime,
-      fare: fare,
-      segments: segments,
-      crowdLevel: crowdLevel ?? this.crowdLevel,
-      isRecommended: isRecommended,
-      aiReasoning: aiReasoning ?? this.aiReasoning,
-      etaChangeNote: etaChangeNote ?? this.etaChangeNote,
+      id:              id,
+      etaMinutes:      etaMinutes   ?? this.etaMinutes,
+      arrivalTime:     arrivalTime  ?? this.arrivalTime,
+      fare:            fare,
+      segments:        segments,
+      crowdLevel:      crowdLevel   ?? this.crowdLevel,
+      isRecommended:   isRecommended,
+      aiReasoning:     aiReasoning  ?? this.aiReasoning,
+      etaChangeNote:   etaChangeNote   ?? this.etaChangeNote,
       etaDeltaMinutes: etaDeltaMinutes ?? this.etaDeltaMinutes,
     );
   }
 }
+
+// ── Label helpers ─────────────────────────────────────────────────────────────
 
 TransitMode parseTransitMode(String? rawMode) {
   switch (rawMode) {
     case 'train': return TransitMode.train;
     case 'bus':   return TransitMode.bus;
     case 'bike':  return TransitMode.bike;
-    case 'walk':
     default:      return TransitMode.walk;
   }
 }
 
 String backendSegmentLabel(TransitMode mode, Map<String, dynamic> step) {
-  final fromStation = (step['from_station'] as String?) ?? '';
-  final toStation   = (step['to_station']   as String?) ?? '';
-  final pair = '$fromStation→$toStation';
+  final from = (step['from_station'] as String?) ?? '';
+  final to   = (step['to_station']   as String?) ?? '';
+  final pair = '$from→$to';
 
   switch (mode) {
     case TransitMode.train:
-      // Derive line from station names — all stations in our seed are known.
-      // Western Line: Andheri, Bandra, Dadar (Western)
-      // Central Line: Kurla, Dadar (Central)
-      // Harbour Line: direct Andheri↔Kurla (sparse, 33 min each way)
-      const westernStations = {
-        'Andheri', 'Bandra', 'Dadar (Western)',
-      };
-      const centralStations = {
-        'Kurla', 'Dadar (Central)',
-      };
-      if (westernStations.contains(fromStation)) return 'WR LOCAL';
-      if (centralStations.contains(fromStation)) return 'CR LOCAL';
+      const western = {'Andheri', 'Bandra', 'Dadar (Western)'};
+      const central = {'Kurla', 'Dadar (Central)'};
+      if (western.contains(from)) return 'WR LOCAL';
+      if (central.contains(from)) return 'CR LOCAL';
       return 'LOCAL';
 
     case TransitMode.bus:
-      // Fixed routes for the seeded corridor — no route numbers in DB schema,
-      // so we derive from the known station pairs in seed/02_dadar_and_edges.sql.
-      // BEST route 318 (approx): Bandra Station ↔ BKC (RBI gate)
-      // BEST route C-54 (approx): Kurla Station ↔ BKC (Diamond Bourse gate)
-      const busRoutes = <String, String>{
-        'Bandra Station Bus Stop→BKC Bus Stop (RBI, SW)':            'BEST 318',
-        'BKC Bus Stop (RBI, SW)→Bandra Station Bus Stop':            'BEST 318',
-        'Kurla Station Bus Stop→BKC Bus Stop (Diamond Bourse, NE)': 'BEST C-54',
-        'BKC Bus Stop (Diamond Bourse, NE)→Kurla Station Bus Stop': 'BEST C-54',
-        // BKC internal walk treated as bus_corridor in some seeds — guard it
-        'BKC Bus Stop (RBI, SW)→BKC Bus Stop (Diamond Bourse, NE)': 'BKC WALK',
-        'BKC Bus Stop (Diamond Bourse, NE)→BKC Bus Stop (RBI, SW)': 'BKC WALK',
+      const routes = <String, String>{
+        'Bandra Station Bus Stop→BKC Bus Stop (RBI, SW)':             'BEST 318',
+        'BKC Bus Stop (RBI, SW)→Bandra Station Bus Stop':             'BEST 318',
+        'Kurla Station Bus Stop→BKC Bus Stop (Diamond Bourse, NE)':  'BEST C-54',
+        'BKC Bus Stop (Diamond Bourse, NE)→Kurla Station Bus Stop':  'BEST C-54',
+        'BKC Bus Stop (RBI, SW)→BKC Bus Stop (Diamond Bourse, NE)':  'BKC WALK',
+        'BKC Bus Stop (Diamond Bourse, NE)→BKC Bus Stop (RBI, SW)':  'BKC WALK',
       };
-      return busRoutes[pair] ?? 'BEST BUS';
+      return routes[pair] ?? 'BEST BUS';
 
     case TransitMode.bike:
       return 'YULU';
 
     case TransitMode.walk:
-      // For walk we show a destination hint rather than "WALK"
-      if (toStation.contains('Bus Stop'))  return 'TO BUS';
-      if (toStation.contains('Bike Dock')) return 'TO DOCK';
-      if (toStation.contains('BKC'))       return 'TO BKC';
-      if (toStation.contains('Bandra'))    return 'TO BANDRA';
-      if (toStation.contains('Kurla'))     return 'TO KURLA';
+      // Walk label is only used in the mode chip, not the step sheet.
+      // Keep it directional.
+      if (to.contains('Bus Stop'))  return 'TO BUS';
+      if (to.contains('Bike Dock')) return 'TO DOCK';
+      if (to.contains('BKC'))       return 'TO BKC';
+      if (to.contains('Bandra'))    return 'TO BANDRA';
+      if (to.contains('Kurla'))     return 'TO KURLA';
       return 'WALK';
   }
 }

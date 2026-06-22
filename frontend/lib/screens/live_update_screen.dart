@@ -30,7 +30,7 @@ class _LiveUpdateScreenState extends State<LiveUpdateScreen>
   StreamSubscription<LiveConditionsUpdate>? _liveSub;
 
   late RouteOption _displayRoute;
-  bool _isLive = false;
+  bool _isLive          = false;
   bool _isRecalculating = false;
 
   @override
@@ -43,10 +43,6 @@ class _LiveUpdateScreenState extends State<LiveUpdateScreen>
       duration: const Duration(milliseconds: 1100),
     )..repeat(reverse: true);
 
-    // Subscribe to Socket.io live-conditions events (now 15s tick).
-    // The Go button is NOT gated on this — the user already has a valid
-    // route and should be able to start immediately. Live updates
-    // improve the displayed data but don't block the user.
     _liveSub = RouteService.liveConditionsStream().listen(_onLiveUpdate);
   }
 
@@ -58,7 +54,7 @@ class _LiveUpdateScreenState extends State<LiveUpdateScreen>
     super.dispose();
   }
 
-  Future<void> _onLiveUpdate(LiveConditionsUpdate update) async {
+  Future<void> _onLiveUpdate(LiveConditionsUpdate _) async {
     if (!mounted) return;
     setState(() => _isRecalculating = true);
 
@@ -83,9 +79,6 @@ class _LiveUpdateScreenState extends State<LiveUpdateScreen>
     }
   }
 
-  // Shows the step-by-step journey breakdown — the key differentiator
-  // from generic maps. Tells the user exactly which service to board,
-  // where, and for how long.
   void _showStepByStep(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -122,9 +115,6 @@ class _LiveUpdateScreenState extends State<LiveUpdateScreen>
             ),
           ),
           const SizedBox(height: 28),
-
-          // Step-by-step button — always enabled. User picked this route,
-          // they should be able to see the breakdown and start immediately.
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
@@ -138,17 +128,12 @@ class _LiveUpdateScreenState extends State<LiveUpdateScreen>
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),
-                textStyle: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 15,
-                ),
+                textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
               ),
             ),
           ),
           const SizedBox(height: 12),
-
-          // Go — always enabled. Selecting this route is the user's
-          // decision; conditions may be updating but they can start now.
+          // Go is always enabled — user has a valid route, they can start now.
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
@@ -164,7 +149,7 @@ class _LiveUpdateScreenState extends State<LiveUpdateScreen>
   }
 }
 
-// ─── Live pill ──────────────────────────────────────────────────────────────
+// ── Live pill ─────────────────────────────────────────────────────────────────
 
 class _LivePill extends StatelessWidget {
   final AnimationController controller;
@@ -198,22 +183,14 @@ class _LivePill extends StatelessWidget {
           FadeTransition(
             opacity: Tween<double>(begin: 0.3, end: 1).animate(controller),
             child: Container(
-              width: 7,
-              height: 7,
-              decoration: const BoxDecoration(
-                color: AppColors.teal,
-                shape: BoxShape.circle,
-              ),
+              width: 7, height: 7,
+              decoration: const BoxDecoration(color: AppColors.teal, shape: BoxShape.circle),
             ),
           ),
           const SizedBox(width: 8),
           Text(
             label,
-            style: const TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w700,
-              color: AppColors.teal,
-            ),
+            style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.teal),
           ),
         ],
       ),
@@ -221,7 +198,7 @@ class _LivePill extends StatelessWidget {
   }
 }
 
-// ─── Step-by-step bottom sheet ──────────────────────────────────────────────
+// ── Step-by-step sheet ────────────────────────────────────────────────────────
 
 class _StepByStepSheet extends StatelessWidget {
   final RouteOption route;
@@ -230,9 +207,9 @@ class _StepByStepSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DraggableScrollableSheet(
-      initialChildSize: 0.55,
-      minChildSize: 0.4,
-      maxChildSize: 0.9,
+      initialChildSize: 0.6,
+      minChildSize:     0.4,
+      maxChildSize:     0.9,
       expand: false,
       builder: (context, scrollController) {
         return Column(
@@ -241,12 +218,8 @@ class _StepByStepSheet extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 12, bottom: 8),
               child: Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.border,
-                  borderRadius: BorderRadius.circular(4),
-                ),
+                width: 36, height: 4,
+                decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(4)),
               ),
             ),
             // Header
@@ -256,49 +229,33 @@ class _StepByStepSheet extends StatelessWidget {
                 children: [
                   const Text(
                     'Your Journey',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.textPrimary,
-                    ),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.textPrimary),
                   ),
                   const Spacer(),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 5,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
                       color: AppColors.amber.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
                       '${route.etaMinutes} min  ·  ${route.fare}',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.navy,
-                      ),
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.navy),
                     ),
                   ),
                 ],
               ),
             ),
             const Divider(height: 1),
-            // Steps
             Expanded(
               child: ListView.separated(
-                controller: scrollController,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 16,
-                ),
-                itemCount: route.segments.length,
-                separatorBuilder: (_, __) => const _StepConnector(),
-                itemBuilder: (_, i) => _StepTile(
-                  segment: route.segments[i],
-                  stepNumber: i + 1,
-                  isLast: i == route.segments.length - 1,
+                controller:   scrollController,
+                padding:      const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                itemCount:    route.segments.length,
+                separatorBuilder: (_, __) => const _Connector(),
+                itemBuilder:  (_, i) => _StepTile(
+                  segment:    route.segments[i],
+                  isLast:     i == route.segments.length - 1,
                 ),
               ),
             ),
@@ -309,16 +266,13 @@ class _StepByStepSheet extends StatelessWidget {
   }
 }
 
+// ── Step tile ─────────────────────────────────────────────────────────────────
+
 class _StepTile extends StatelessWidget {
   final ModeSegment segment;
-  final int stepNumber;
   final bool isLast;
 
-  const _StepTile({
-    required this.segment,
-    required this.stepNumber,
-    required this.isLast,
-  });
+  const _StepTile({required this.segment, required this.isLast});
 
   Color get _color {
     switch (segment.mode) {
@@ -338,71 +292,129 @@ class _StepTile extends StatelessWidget {
     }
   }
 
-  String get _action {
+  // Fix #5: Walk steps say "Walk to [destination]" not "Walk  TO BUS".
+  // All other steps say "Board/Rent [service] at [station]".
+  String get _title {
+    final from = cleanStation(segment.fromStation);
     switch (segment.mode) {
-      case TransitMode.train: return 'Board train';
-      case TransitMode.bus:   return 'Board bus';
-      case TransitMode.bike:  return 'Rent bike';
-      case TransitMode.walk:  return 'Walk';
+      case TransitMode.walk:
+        final dest = cleanStation(segment.toStation);
+        return dest.isNotEmpty ? 'Walk to $dest' : 'Walk';
+      case TransitMode.train:
+        return 'Board ${segment.label}${from.isNotEmpty ? " at $from" : ""}';
+      case TransitMode.bus:
+        return 'Board ${segment.label}${from.isNotEmpty ? " at $from" : ""}';
+      case TransitMode.bike:
+        return 'Rent YULU${from.isNotEmpty ? " at $from" : ""}';
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final isWalk = segment.mode == TransitMode.walk;
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Mode icon
+        // Icon
         Container(
-          width: 40,
-          height: 40,
+          width: 42, height: 42,
           decoration: BoxDecoration(
-            color: _color.withOpacity(0.12),
+            color:  _color.withOpacity(0.12),
             border: Border.all(color: _color, width: 1.6),
             borderRadius: BorderRadius.circular(10),
           ),
           child: Icon(_icon, size: 18, color: _color),
         ),
         const SizedBox(width: 14),
-        // Text
+        // Text block
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Action + route name
-              RichText(
-                text: TextSpan(
+              // Title — action + service name
+              Text(
+                _title,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+
+              // "towards [destination]" — only for non-walk steps
+              if (!isWalk && segment.toStation.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Text(
+                  'towards ${cleanStation(segment.toStation)}',
                   style: const TextStyle(
-                    fontSize: 14,
-                    color: AppColors.textPrimary,
+                    fontSize: 12.5,
+                    color: AppColors.textMuted,
+                    fontWeight: FontWeight.w600,
                   ),
+                ),
+              ],
+
+              // Fix #3: Departure time — show when available
+              if (segment.departAt != null) ...[
+                const SizedBox(height: 2),
+                Row(
                   children: [
-                    TextSpan(
-                      text: '$_action  ',
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    TextSpan(
-                      text: segment.label,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        color: _color,
+                    const Icon(Icons.schedule_rounded, size: 12, color: AppColors.textMuted),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Depart ${segment.departAt}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textMuted,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
                 ),
+              ],
+
+              const SizedBox(height: 4),
+
+              // Fix #4: Wait time + travel time on separate chips
+              Wrap(
+                spacing: 6,
+                children: [
+                  // Fix #4: Wait time chip — only shown when > 0
+                  if (segment.waitMinutes > 0)
+                    _InfoChip(
+                      label: 'Wait ~${segment.waitMinutes}m',
+                      color: AppColors.amber,
+                    ),
+                  _InfoChip(
+                    label: '${segment.travelMinutes}m journey',
+                    color: _color,
+                  ),
+                ],
               ),
-              const SizedBox(height: 3),
-              // Towards + duration
-              Text(
-                segment.sublabel.isNotEmpty
-                    ? 'towards ${segment.sublabel}  ·  ${segment.duration}'
-                    : segment.duration,
-                style: const TextStyle(
-                  fontSize: 12.5,
-                  color: AppColors.textMuted,
-                  fontWeight: FontWeight.w600,
+
+              // Fix #6: Platform note for train — honest acknowledgment
+              // that live platform data isn't available in the current data
+              // model. Trains typically announce platform on display boards.
+              if (segment.mode == TransitMode.train) ...[
+                const SizedBox(height: 4),
+                Row(
+                  children: const [
+                    Icon(Icons.info_outline_rounded, size: 12, color: AppColors.textMuted),
+                    SizedBox(width: 4),
+                    Text(
+                      'Check platform display board at station',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textMuted,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
+              ],
+
+              const SizedBox(height: 4),
             ],
           ),
         ),
@@ -411,21 +423,45 @@ class _StepTile extends StatelessWidget {
   }
 }
 
-class _StepConnector extends StatelessWidget {
-  const _StepConnector();
+class _InfoChip extends StatelessWidget {
+  final String label;
+  final Color  color;
+  const _InfoChip({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color:        color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(6),
+        border:       Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: color == AppColors.textMuted ? AppColors.textMuted : AppColors.navy,
+        ),
+      ),
+    );
+  }
+}
+
+class _Connector extends StatelessWidget {
+  const _Connector();
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(left: 19),
-      child: Column(
-        children: List.generate(4, (_) => const SizedBox(
-          height: 5,
-          child: VerticalDivider(
-            width: 2,
-            color: AppColors.border,
-          ),
-        )),
+      padding: const EdgeInsets.only(left: 20),
+      child: SizedBox(
+        height: 20,
+        child: VerticalDivider(
+          width: 2,
+          color: AppColors.border,
+        ),
       ),
     );
   }
