@@ -2,6 +2,28 @@ import { GoogleGenAI } from '@google/genai';
 
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
+// Human-readable names for every route_id in ROUTE_STRATEGIES.
+// Used in the prompt so Gemini never references a raw route_id in prose,
+// and as a sanitizer fallback if it does anyway.
+const ROUTE_HUMAN_NAMES = {
+  via_bandra_bus:  'Western Line train to Bandra, then BEST bus to BKC',
+  via_bandra_bike: 'Western Line train to Bandra, then Yulu bike to BKC',
+  via_kurla_bus:   'train via Kurla, then BEST bus to BKC',
+  via_kurla_bike:  'train via Kurla, then Yulu bike to BKC',
+};
+
+// Sanitize AI text that accidentally leaks raw route_id values.
+// Belt-and-suspenders: the prompt already forbids this, but this catches
+// any slip-through before the text reaches the user's screen.
+function sanitizeRouteIds(text) {
+  if (!text) return text;
+  let result = text;
+  for (const [id, name] of Object.entries(ROUTE_HUMAN_NAMES)) {
+    result = result.replace(new RegExp(`'?${id}'?`, 'gi'), name);
+  }
+  return result;
+}
+
 const RANKING_RESPONSE_SCHEMA = {
   type: 'object',
   properties: {
@@ -11,8 +33,8 @@ const RANKING_RESPONSE_SCHEMA = {
         type: 'object',
         properties: {
           route_id: { type: 'string' },
-          rank: { type: 'integer' },
-          reason: { type: 'string' },
+          rank:     { type: 'integer' },
+          reason:   { type: 'string' },
         },
         required: ['route_id', 'rank', 'reason'],
       },
@@ -22,17 +44,28 @@ const RANKING_RESPONSE_SCHEMA = {
   required: ['ranked_routes', 'top_choice_reason'],
 };
 
-// ============================================================
-// Pure functions — no network access, fully unit-testable.
-// ============================================================
+// ── Pure functions ────────────────────────────────────────────────────────────
+
 export function summarizeCandidateForPrompt(candidate) {
-  const etaMin = (candidate.total_duration_seconds / 60).toFixed(1);
-  const parts = [`route_id: ${candidate.route_id}`, `ETA: ${etaMin} min`, `last-mile mode: ${candidate.last_mile_mode}`];
+  const etaMin    = (candidate.total_duration_seconds / 60).toFixed(1);
+  const humanName = ROUTE_HUMAN_NAMES[candidate.route_id] || candidate.route_id;
+
+  // Give Gemini both the route_id (needed for JSON) and a plain-English
+  // description so it can write human-readable reasons without ever
+  // repeating the route_id in its prose.
+  const parts = [
+    `route_id: ${candidate.route_id}`,
+    `description: ${humanName}`,
+    `ETA: ${etaMin} min`,
+    `last-mile mode: ${candidate.last_mile_mode}`,
+  ];
 
   const trainStep = candidate.steps.find((s) => s.mode === 'train' && s.crowd_density !== undefined);
   if (trainStep) parts.push(`train crowd: ${trainStep.crowd_density}`);
+
   const busStep = candidate.steps.find((s) => s.mode === 'bus' && s.crowd_density !== undefined);
   if (busStep) parts.push(`bus crowd: ${busStep.crowd_density}`);
+
   if (candidate.min_bikes_available !== null && candidate.min_bikes_available !== undefined) {
     parts.push(`bikes available: ${candidate.min_bikes_available}`);
   }
@@ -41,18 +74,24 @@ export function summarizeCandidateForPrompt(candidate) {
 }
 
 export function buildRankingPrompt(candidates, { destination, departureTime }) {
-  const routeLines = candidates.map((c) => `${candidates.indexOf(c) + 1}. ${summarizeCandidateForPrompt(c)}`).join('\n');
+  const routeLines = candidates
+    .map((c, i) => `${i + 1}. ${summarizeCandidateForPrompt(c)}`)
+    .join('\n');
 
-  const prompt = `You are a transit routing assistant for MumbaiNav, helping a commuter travel from Andheri to ${destination} in Mumbai, departing around ${departureTime}.
+  return `You are a transit routing assistant for MumbaiNav, helping a commuter travel from Andheri to ${destination} in Mumbai, departing around ${departureTime}.
 
-Given the candidate routes below and their current real-time conditions, rank them from best to worst for the commuter and provide a one-sentence reason for each. A route with very low bikes available (0-1) should generally be treated as unreliable even if its on-paper ETA is fastest — the commuter may not actually be able to get a bike. A route with high train or bus crowd density (above ~0.8) is uncomfortable but still usable; weigh it as a real but lesser downside compared to a route that isn't actually rideable.
+Given the candidate routes below and their current real-time conditions, rank them from best to worst and provide a one-sentence reason for each.
+
+CRITICAL LANGUAGE RULES — follow these exactly or the output will be rejected:
+- NEVER write a route_id value (e.g. "via_bandra_bus") in any reason or top_choice_reason. Use the route's "description" field or plain phrases like "the Bandra bus route" or "the Kurla bike option".
+- Write every reason as if speaking directly to the commuter in plain English, not to a developer.
+- A route with very low bikes available (0-1) is unreliable even if its ETA looks fast — the commuter may not get a bike.
+- High crowd density (above 0.8) is uncomfortable but usable; weigh it as a lesser downside compared to a route that may not be rideable.
 
 Routes:
 ${routeLines}
 
-Respond with structured JSON only: a ranked_routes array (each with route_id, rank starting at 1, and a one-sentence reason) covering every route_id listed above exactly once, plus a top_choice_reason summarizing why the #1 pick was chosen over the alternatives.`;
-
-  return prompt;
+Respond with structured JSON only: a ranked_routes array (each entry has route_id, rank starting at 1, and a one-sentence commuter-friendly reason) covering every route_id exactly once, plus a top_choice_reason summarizing why the #1 pick beats the alternatives.`;
 }
 
 export function validateRankingResponse(parsed, candidates) {
@@ -78,27 +117,25 @@ export function validateRankingResponse(parsed, candidates) {
   return true;
 }
 
-// ============================================================
-// The only function that actually calls the network.
-// ============================================================
+// ── Network call ──────────────────────────────────────────────────────────────
 
 export async function rankRoutesWithAI(candidates, { destination, departureTime }) {
   if (!process.env.GEMINI_API_KEY) {
-    throw new Error('GEMINI_API_KEY is not set — copy .env.example and add your key from Google AI Studio');
+    throw new Error('GEMINI_API_KEY is not set — copy .env.example and add your key');
   }
   if (candidates.length === 0) {
     throw new Error('no candidates to rank');
   }
 
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  const ai     = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   const prompt = buildRankingPrompt(candidates, { destination, departureTime });
 
   const response = await ai.models.generateContent({
-    model: GEMINI_MODEL,
+    model:    GEMINI_MODEL,
     contents: prompt,
     config: {
       responseMimeType: 'application/json',
-      responseSchema: RANKING_RESPONSE_SCHEMA,
+      responseSchema:   RANKING_RESPONSE_SCHEMA,
     },
   });
 
@@ -110,5 +147,13 @@ export async function rankRoutesWithAI(candidates, { destination, departureTime 
   }
 
   validateRankingResponse(parsed, candidates);
+
+  // Sanitize any route_id leakage before text leaves the server
+  parsed.top_choice_reason = sanitizeRouteIds(parsed.top_choice_reason);
+  parsed.ranked_routes = parsed.ranked_routes.map((r) => ({
+    ...r,
+    reason: sanitizeRouteIds(r.reason),
+  }));
+
   return parsed;
 }
